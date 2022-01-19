@@ -276,8 +276,6 @@ class DensePosePoiseNetLoss:
             block_slice = u_gt_cls,
             slice_fine_segm = fine_segm_gt,
         )[j_valid_fg] # J
-        print(np.array(u_est_cls.detach().cpu()).tolist())
-        print(np.array(u_est_offsets.detach().cpu()).tolist())
         v_est_cls = interpolator.extract_at_points(
             densepose_predictor_outputs.v_cls.reshape(est_shape[0], -1, self.block_num, est_shape[2], est_shape[3]),
             block = True,
