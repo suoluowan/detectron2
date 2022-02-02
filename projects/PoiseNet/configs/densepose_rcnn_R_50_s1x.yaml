@@ -4,6 +4,7 @@ MODEL:
   RESNETS:
     DEPTH: 50
   ROI_DENSEPOSE_HEAD:
+    DECODER_ON: False
     PREDICTOR_NAME: "PoiseNetPredictor"
     LOSS_NAME: "DensePosePoiseNetLoss"
     # PART_WEIGHTS: 0.002
@@ -14,7 +15,8 @@ MODEL:
     # FREQ_CLASSES: [7,8,11,12]
     POISE_CLS_WEIGHTS: 0.0005
     POISE_REGRESSION_WEIGHTS: 0.01
+SEED: 35409553
 SOLVER:
   MAX_ITER: 130000
   STEPS: (100000, 120000)
-OUTPUT_DIR: "./output/poisenet_R_50_fpn_s1x_8gpu_sabl-0.05+1_35409553/"
+OUTPUT_DIR: "./output/poisenet_R_50_s1x_8gpu_sabl-0.05+1_35409553/"
