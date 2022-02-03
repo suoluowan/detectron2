@@ -61,6 +61,14 @@ class DensePoseChartLoss:
         self.segm_trained_by_masks = cfg.MODEL.ROI_DENSEPOSE_HEAD.COARSE_SEGM_TRAINED_BY_MASKS
         self.segm_loss = MaskOrSegmentationLoss(cfg)
 
+        self.part_loss_type  = cfg.MODEL.POISENET.PART_LOSS_TYPE
+        self.freq_classes    = cfg.MODEL.POISENET.FREQ_CLASSES
+        self.n_i_chan        = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_PATCHES
+        self.gamma           = 0.99
+
+        self.smoothing       = 0.1
+        self.confidense      = 1. - self.smoothing
+
     def __call__(
         self, proposals_with_gt: List[Instances], densepose_predictor_outputs: Any, **kwargs
     ) -> LossDict:
@@ -281,6 +289,29 @@ class DensePoseChartLoss:
             w_yhi_xlo=interpolator.w_yhi_xlo[:, None],  # pyre-ignore[16]
             w_yhi_xhi=interpolator.w_yhi_xhi[:, None],  # pyre-ignore[16]
         )[interpolator.j_valid, :]
+        if self.part_loss_type == "AEQL":
+            J = fine_segm_gt.shape[0]
+            E = self.exclude_func(J)
+            T = self.threshold_func(fine_segm_gt, J)
+            y_t = F.one_hot(fine_segm_gt, fine_segm_est.shape[1])
+            M = torch.max(fine_segm_est, dim=1, keepdim=True)[0]
+
+            prob = torch.softmax(fine_segm_est, axis=1).detach()
+            top_values, top_index = prob.topk(13, dim=1, largest=False, sorted=True)
+            mi = fine_segm_est.gather(1, top_index[torch.arange(J),-1].unsqueeze(-1))
+
+            correlation = torch.exp(-(fine_segm_est-mi)/(M-mi)).detach()
+            correlation = correlation.scatter(1, top_index, 1.)
+            eql_w = 1. - E * T * (1. - y_t)*correlation
+
+            x = (fine_segm_est-M) - torch.log(torch.sum(eql_w*torch.exp(fine_segm_est-M), dim=1)).unsqueeze(1).repeat(1, fine_segm_est.shape[1])
+            smooth_loss = -x.mean(dim=-1)
+            return {
+                "loss_densepose_I": torch.sum(F.nll_loss(x, fine_segm_gt.long())*self.confidense + smooth_loss*self.smoothing) * self.w_part,
+                "loss_densepose_S": self.segm_loss(
+                    proposals_with_gt, densepose_predictor_outputs, packed_annotations
+                ) * self.w_segm,
+            }
         return {
             "loss_densepose_I": F.cross_entropy(fine_segm_est, fine_segm_gt.long()) * self.w_part,
             "loss_densepose_S": self.segm_loss(
@@ -288,3 +319,22 @@ class DensePoseChartLoss:
             )
             * self.w_segm,
         }
+    def exclude_func(self, J):
+        weight = torch.zeros((J), dtype=torch.float).cuda()
+        beta = torch.Tensor(weight.shape).cuda().uniform_(0,1)
+        weight[beta < self.gamma] = 1
+        weight = weight.view(J, 1).expand(J, self.n_i_chan+1)
+        return weight
+
+    def threshold_func(self, gt_classes, J): 
+        weight = torch.zeros(self.n_i_chan+1).cuda()
+        if isinstance(self.freq_classes, list):
+            for c in self.freq_classes:
+                weight[c] = 1.
+        elif self.freq_classes == "gompertz_decay":
+            freq = torch.tensor([0,0.04157,0.1245,0.0554,0.0515,0.0310,0.0304,0.0164,0.0167,0.0531,0.0527,0.0143,0.0158,0.0385,0.0397,0.0340,0.0358,0.0419,0.0441,0.0207,0.0262,0.0486,0.0461,0.0623,0.0586], dtype=float).cuda()
+            weight = 1-torch.exp(-8*torch.exp(-100*freq))
+        weight = weight.unsqueeze(0)
+        weight = weight.repeat(J, 1)
+        return weight
+

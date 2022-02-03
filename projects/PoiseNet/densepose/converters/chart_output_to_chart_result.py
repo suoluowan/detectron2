@@ -3,6 +3,8 @@
 from typing import Dict
 import torch
 from torch.nn import functional as F
+import json
+import numpy as np
 
 from detectron2.structures.boxes import Boxes, BoxMode
 
@@ -93,10 +95,10 @@ def resample_poisenet_uv_to_bbox(
     # block_fpath = cfg.MODEL.ROI_DENSEPOSE_HEAD.block_FPATH
     with open(bFpath, "rb") as bFile:
         block = json.loads(json.load(bFile))
-    block_u_width = torch.tensor(np.array(block["block_u_width"]), dtype=torch.float32,device=predictor_output.u_cls.device)
-    block_v_width =  torch.tensor(np.array(block["block_v_width"]), dtype=torch.float32,device=predictor_output.u_cls.device)
-    block_u_center =  torch.tensor(np.array(block["block_u_center"]), dtype=torch.float32,device=predictor_output.u_cls.device)
-    block_v_center =  torch.tensor(np.array(block["block_v_center"]), dtype=torch.float32,device=predictor_output.u_cls.device)
+    block_u_width = torch.tensor(np.array(block["bucket_u_width"]), dtype=torch.float32,device=predictor_output.u_cls.device)
+    block_v_width =  torch.tensor(np.array(block["bucket_v_width"]), dtype=torch.float32,device=predictor_output.u_cls.device)
+    block_u_center =  torch.tensor(np.array(block["bucket_u_center"]), dtype=torch.float32,device=predictor_output.u_cls.device)
+    block_v_center =  torch.tensor(np.array(block["bucket_v_center"]), dtype=torch.float32,device=predictor_output.u_cls.device)
     del block
     x, y, w, h = box_xywh_abs
     w = max(int(w), 1)
@@ -147,7 +149,8 @@ def densepose_chart_predictor_output_to_result(
     return DensePoseChartResult(labels=labels, uv=uv)
 
 def poisenet_predictor_output_to_result(
-    predictor_output: PoiseNetPredictorOutput, boxes: Boxes
+    predictor_output: PoiseNetPredictorOutput, boxes: Boxes,
+    *args, **kwargs
 ) -> DensePoseChartResult:
     """
     Convert densepose chart predictor outputs to results
@@ -170,7 +173,7 @@ def poisenet_predictor_output_to_result(
     box_xywh = make_int_box(boxes_xywh_abs[0])
 
     labels = resample_fine_and_coarse_segm_to_bbox(predictor_output, box_xywh).squeeze(0)
-    uv = resample_poisenet_uv_to_bbox(predictor_output, labels, box_xywh)
+    uv = resample_poisenet_uv_to_bbox(predictor_output, labels, box_xywh, kwargs["block_fpath"])
     return DensePoseChartResult(labels=labels, uv=uv)
 
 

@@ -39,7 +39,7 @@ class PoiseNetPredictorOutput:
 
     def __getitem__(
         self, item: Union[int, slice, torch.BoolTensor]
-    ) -> "DensePoseChartPredictorOutput":
+    ) -> "PoiseNetPredictorOutput":
         """
         Get outputs for the selected instance(s)
 
@@ -47,7 +47,7 @@ class PoiseNetPredictorOutput:
             item (int or slice or tensor): selected items
         """
         if isinstance(item, int):
-            return DensePoseChartPredictorOutput(
+            return PoiseNetPredictorOutput(
                 coarse_segm=self.coarse_segm[item].unsqueeze(0),
                 fine_segm=self.fine_segm[item].unsqueeze(0),
                 u_cls=self.u_cls[item].unsqueeze(0),
@@ -56,7 +56,7 @@ class PoiseNetPredictorOutput:
                 v_offset=self.v_offset[item].unsqueeze(0),
             )
         else:
-            return DensePoseChartPredictorOutput(
+            return PoiseNetPredictorOutput(
                 coarse_segm=self.coarse_segm[item],
                 fine_segm=self.fine_segm[item],
                 u_cls=self.u_cls[item],

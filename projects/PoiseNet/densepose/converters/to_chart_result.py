@@ -89,4 +89,4 @@ class ToChartResultConverterWithPoiseNet(BaseConverter):
         Return:
             An instance of DensePoseResult. If no suitable converter was found, raises KeyError
         """
-        return super(ToChartResultConverter, cls).convert(predictor_outputs, boxes, *args, **kwargs)
+        return super(ToChartResultConverterWithPoiseNet, cls).convert(predictor_outputs, boxes, *args, **kwargs)

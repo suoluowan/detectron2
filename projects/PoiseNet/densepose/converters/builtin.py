@@ -21,6 +21,9 @@ ToMaskConverter.register(
 ToMaskConverter.register(
     DensePoseEmbeddingPredictorOutput, predictor_output_with_coarse_segm_to_mask
 )
+ToMaskConverter.register(
+    PoiseNetPredictorOutput, predictor_output_with_fine_and_coarse_segm_to_mask
+)
 
 ToChartResultConverter.register(
     DensePoseChartPredictorOutput, densepose_chart_predictor_output_to_result

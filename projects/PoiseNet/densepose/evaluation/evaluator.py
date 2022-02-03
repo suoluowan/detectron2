@@ -271,7 +271,7 @@ def densepose_poisenet_predictions_to_dict(instances, block_fpath):
     results = []
     for k in range(len(instances)):
         densepose_results_quantized = quantize_densepose_chart_result(
-            ToChartResultConverterWithPoiseNet.convert(instances.pred_densepose[k], instances.pred_boxes[k])
+            ToChartResultConverterWithPoiseNet.convert(instances.pred_densepose[k], instances.pred_boxes[k], block_fpath=block_fpath)
         )
         densepose_results_quantized.labels_uv_uint8 = (
             densepose_results_quantized.labels_uv_uint8.cpu()
