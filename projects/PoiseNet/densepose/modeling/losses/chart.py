@@ -297,7 +297,7 @@ class DensePoseChartLoss:
             M = torch.max(fine_segm_est, dim=1, keepdim=True)[0]
 
             prob = torch.softmax(fine_segm_est, axis=1).detach()
-            top_values, top_index = prob.topk(13, dim=1, largest=False, sorted=True)
+            top_values, top_index = prob.topk(18, dim=1, largest=False, sorted=True)
             mi = fine_segm_est.gather(1, top_index[torch.arange(J),-1].unsqueeze(-1))
 
             correlation = torch.exp(-(fine_segm_est-mi)/(M-mi)).detach()

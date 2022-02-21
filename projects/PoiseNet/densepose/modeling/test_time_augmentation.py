@@ -83,7 +83,10 @@ class DensePoseGeneralizedRCNNWithTTA(GeneralizedRCNNWithTTA):
             if self.cfg.MODEL.MASK_ON:
                 merged_instances.pred_masks = self._reduce_pred_masks(outputs, tfms)
             if self.cfg.MODEL.DENSEPOSE_ON:
-                merged_instances.pred_densepose = self._reduce_pred_densepose(outputs, tfms)
+                if self.cfg.MODEL.ROI_DENSEPOSE_HEAD.PREDICTOR_NAME == "PoiseNetPredictor":
+                    merged_instances.pred_densepose = self._reduce_pred_poisenet(outputs, tfms)
+                else:
+                    merged_instances.pred_densepose = self._reduce_pred_densepose(outputs, tfms)
             # postprocess
             merged_instances = detector_postprocess(merged_instances, *orig_shape)
             return {"instances": merged_instances}
@@ -131,10 +134,38 @@ class DensePoseGeneralizedRCNNWithTTA(GeneralizedRCNNWithTTA):
                 )
             self._incremental_avg_dp(outputs[0].pred_densepose, output.pred_densepose, idx)
         return outputs[0].pred_densepose
+    def _reduce_pred_poisenet(self, outputs, tfms):
+        # Should apply inverse transforms on densepose preds.
+        # We assume only rotation, resize & flip are used. pred_masks is a scale-invariant
+        # representation, so we handle the other ones specially
+        for idx, (output, tfm) in enumerate(zip(outputs, tfms)):
+            for t in tfm.transforms:
+                for attr in ["coarse_segm", "fine_segm", "u_cls", "u_offset", "v_cls", "v_offset"]:
+                    setattr(
+                        output.pred_densepose,
+                        attr,
+                        _inverse_rotation(
+                            getattr(output.pred_densepose, attr), output.pred_boxes.tensor, t
+                        ),
+                    )
+            if any(isinstance(t, HFlipTransform) for t in tfm.transforms):
+                output.pred_densepose = HFlipConverter.convert(
+                    output.pred_densepose, self._transform_data
+                )
+            self._incremental_avg_pn(outputs[0].pred_densepose, output.pred_densepose, idx)
+        return outputs[0].pred_densepose
+        
 
     # incrementally computed average: u_(n + 1) = u_n + (x_(n+1) - u_n) / (n + 1).
     def _incremental_avg_dp(self, avg, new_el, idx):
         for attr in ["coarse_segm", "fine_segm", "u", "v"]:
+            setattr(avg, attr, (getattr(avg, attr) * idx + getattr(new_el, attr)) / (idx + 1))
+            if idx:
+                # Deletion of the > 0 index intermediary values to prevent GPU OOM
+                setattr(new_el, attr, None)
+        return avg
+    def _incremental_avg_pn(self, avg, new_el, idx):
+        for attr in ["coarse_segm", "fine_segm", "u_cls", "u_offset", "v_cls", "v_offset"]:
             setattr(avg, attr, (getattr(avg, attr) * idx + getattr(new_el, attr)) / (idx + 1))
             if idx:
                 # Deletion of the > 0 index intermediary values to prevent GPU OOM

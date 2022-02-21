@@ -5,6 +5,8 @@ MODEL:
     DEPTH: 50
   ROI_DENSEPOSE_HEAD:
     NAME: "DensePoseDeepLabHead"
+SEED: 35409553
 SOLVER:
   MAX_ITER: 130000
   STEPS: (100000, 120000)
+OUTPUT_DIR: "./output/densepose_R_50_FPN_DL_s1x_8gpu_35409553/"

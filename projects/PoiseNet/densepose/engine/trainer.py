@@ -164,11 +164,12 @@ class Trainer(DefaultTrainer):
         #     evaluators.append(COCOEvaluator(dataset_name, output_dir=output_folder))
         # elif evaluator_type == "lvis":
         #     evaluators.append(LVISEvaluator(dataset_name, output_dir=output_folder))
-        evaluators.append(
-            Detectron2COCOEvaluatorAdapter(
-                dataset_name, output_dir=output_folder, distributed=distributed
+        if not cfg.TEST.AUG.ENABLED:
+            evaluators.append(
+                Detectron2COCOEvaluatorAdapter(
+                    dataset_name, output_dir=output_folder, distributed=distributed
+                )
             )
-        )
         if cfg.MODEL.DENSEPOSE_ON:
             storage = build_densepose_evaluator_storage(cfg, output_folder)
             evaluators.append(
