@@ -7,7 +7,7 @@ MODEL:
     DECODER_ON: False
     PREDICTOR_NAME: "PoiseNetPredictor"
     LOSS_NAME: "DensePosePoiseNetLoss"
-    PART_WEIGHTS: 0.002
+    PART_WEIGHTS: 0.001
   POISENET:
     BLOCK_FPATH: "/home/sunjunyao/code/Model/tmp/blocks/block-5.json"
     BLOCK_NUM: 5
@@ -17,6 +17,6 @@ MODEL:
     POISE_REGRESSION_WEIGHTS: 0.01
 SEED: 35409553
 SOLVER:
-  MAX_ITER: 160000
-  STEPS: (100000, 140000)
-OUTPUT_DIR: "./output/poisenet_R_50_s1x_8gpu_aeql-norm-8-0.002_sabl-0.08+1_101416_35409553/"
+  MAX_ITER: 130000
+  STEPS: (100000, 120000)
+OUTPUT_DIR: "./output/poisenet_R_50_s1x_8gpu_aeql-norm-8-0.001_sabl-0.08+1_35409553/"
