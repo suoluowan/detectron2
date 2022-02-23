@@ -204,7 +204,11 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
     Returns:
         list[dict]: the results in densepose evaluation format
     """
-    scores = instances.scores.tolist()
+    
+    if instances.has("densepose_scores"):
+        scores = instances.densepose_scores.tolist()
+    else:
+        scores = instances.scores.tolist()
     classes = instances.pred_classes.tolist()
     raw_boxes_xywh = BoxMode.convert(
         instances.pred_boxes.tensor.clone(), BoxMode.XYXY_ABS, BoxMode.XYWH_ABS
@@ -254,6 +258,8 @@ def densepose_chart_predictions_to_dict(instances):
             "densepose": densepose_results_quantized,
             "segmentation": segmentation_encoded,
         }
+        # if instances.has("densepose_scores"):
+        #     result.update({"dp_scores": instances.densepose_scores[k].squeeze(0).cpu()})
         results.append(result)
     return results
 
@@ -268,6 +274,8 @@ def densepose_chart_predictions_to_storage_dict(instances):
             "u": densepose_predictor_output.u.squeeze(0).cpu(),
             "v": densepose_predictor_output.v.squeeze(0).cpu(),
         }
+        # if instances.has("densepose_scores"):
+        #     result.update({"dp_scores": instances.densepose_scores[k].squeeze(0).cpu()})
         results.append(result)
     return results
 
@@ -392,6 +400,7 @@ def build_densepose_evaluator_storage(cfg: CfgNode, output_folder: str):
     hout = cfg.MODEL.ROI_DENSEPOSE_HEAD.HEATMAP_SIZE
     wout = cfg.MODEL.ROI_DENSEPOSE_HEAD.HEATMAP_SIZE
     n_csc = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_COARSE_SEGM_CHANNELS
+    # scoring_on = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING_ON
     # specific output tensors
     if evaluator_type == "iuv":
         n_fsc = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_PATCHES + 1
@@ -401,6 +410,8 @@ def build_densepose_evaluator_storage(cfg: CfgNode, output_folder: str):
             "u": SizeData(dtype="float32", shape=(n_fsc, hout, wout)),
             "v": SizeData(dtype="float32", shape=(n_fsc, hout, wout)),
         }
+        # if scoring_on:
+        #     schema.update({"densepose_scores": SizeData(dtype="float32", shape=(1))})
     elif evaluator_type == "cse":
         embed_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.CSE.EMBED_SIZE
         schema = {

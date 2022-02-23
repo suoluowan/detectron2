@@ -8,11 +8,13 @@ MODEL:
     SCORING_ON: True
     SCORING:
       NAME: "DensePoseFCHead"
-      HIDDEN_DIM: 512
+      HIDDEN_DIM: 256
       LOSS_WEIGHT: 10.
 SEED: 35409553
 SOLVER:
   MAX_ITER: 130000
   STEPS: (100000, 120000)
   IMS_PER_BATCH: 4
+DATASETS:
+  TEST: ("densepose_coco_2014_minival_100",)
 OUTPUT_DIR: "./output/densepose_R_50_s1x_8gpu_scoring-10_35409553/"

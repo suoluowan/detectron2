@@ -106,6 +106,11 @@ DATASETS = [
         images_root="coco/val2017",
         annotations_fpath="lvis/lvis_v0.5_plus_dp_val.json",
     ),
+    CocoDatasetInfo(
+        name="densepose_coco_2014_test1",
+        images_root="coco/val2014",
+        annotations_fpath="coco/annotations/densepose_coco_2014_test1.json",
+    ),
 ]
 
 

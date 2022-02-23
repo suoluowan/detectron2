@@ -41,7 +41,7 @@ def densepose_inference(densepose_predictor_output: Any, detections: List[Instan
             else:
                 output_i_dict[field.name] = field_value
         detection_i.pred_densepose = PredictorOutput(**output_i_dict)
-        
+
         # add pred_densepose_score attribute
         if densepose_scoring_predictor_outputs is not None:
             ScoreOutput = type(densepose_scoring_predictor_outputs)
@@ -52,5 +52,5 @@ def densepose_inference(densepose_predictor_output: Any, detections: List[Instan
                     output_i_score_dict[field.name] = field_value[k : k + n_i]
                 else:
                     output_i_score_dict[field.name] = field_value
-            detection_i.pred_densepose_score = ScoreOutput(**output_i_score_dict)
+            detection_i.densepose_scores = torch.sqrt(detection_i.scores * output_i_score_dict["densepose_score"].squeeze())
         k += n_i
