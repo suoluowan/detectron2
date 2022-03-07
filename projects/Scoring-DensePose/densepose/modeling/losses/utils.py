@@ -447,8 +447,30 @@ def l2_loss(input, target):
     """
     pos_inds = torch.nonzero(target > 0.0).squeeze(1)
     if pos_inds.shape[0] > 0:
+        # pos_est = input[pos_inds]
+        # pos_gt = target[pos_inds]
         cond = torch.abs(input[pos_inds] - target[pos_inds])
-        loss = 0.5 * cond ** 2 / pos_inds.shape[0]
+        # loss = 0.5 * cond ** 2 / pos_inds.shape[0]
+        loss = 0.5 * cond ** 2
+        # loss = F.smooth_l1_loss(pos_est, pos_gt, reduction="sum")
     else:
         loss = input * 0.0
+    return loss.sum()
+def gfocal_loss(input, target, beta=2.0):
+    pred_sigmoid = torch.sigmoid(input)
+    scale_factor = pred_sigmoid
+    zeroslabel = scale_factor.new_zeros(input.shape)
+    loss = F.binary_cross_entropy_with_logits(input, zeroslabel, reduction='none')*scale_factor
+    pos_inds = torch.nonzero(target > 0.0).squeeze(1)
+    scale_factor = target[pos_inds] - pred_sigmoid[pos_inds]
+    loss[pos_inds] = F.binary_cross_entropy_with_logits(input[pos_inds], target[pos_inds], reduction='none') * scale_factor.abs().pow(beta)
+    return loss.sum()
+def vfocal_loss(input, target, alpha=0.75, beta=2.0):
+    pred_sigmoid = torch.sigmoid(input)
+    scale_factor = pred_sigmoid
+    zeroslabel = scale_factor.new_zeros(input.shape)
+    loss = torch.log(1-pred_sigmoid)*scale_factor.pow(beta)*(-alpha)
+    pos_inds = torch.nonzero(target > 0.0).squeeze(1)
+    scale_factor = target[pos_inds]
+    loss[pos_inds] = F.binary_cross_entropy_with_logits(input[pos_inds], target[pos_inds], reduction='none') * scale_factor
     return loss.sum()

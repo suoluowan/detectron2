@@ -15,6 +15,8 @@ from .utils import (
     LossDict,
     extract_packed_annotations_from_matches,
     l2_loss,
+    gfocal_loss,
+    vfocal_loss,
 )
 
 import scipy.spatial.distance as ssd
@@ -29,9 +31,9 @@ class DensePoseScoringLoss:
     def __init__(self, cfg: CfgNode):
         self.loss_weight     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT
 
-        smpl_subdiv_fpath = '/home/sunjunyao/code/Model/tmp/smpl/SMPL_subdiv.mat'
-        pdist_transform_fpath = '/home/sunjunyao/code/Model/tmp/smpl/SMPL_SUBDIV_TRANSFORM.mat'
-        pdist_matrix_fpath = '/home/sunjunyao/code/Model/tmp/smpl/Pdist_matrix.pkl'
+        smpl_subdiv_fpath = '/home/sunjunyao/tmp/smpl/SMPL_subdiv.mat'
+        pdist_transform_fpath = '/home/sunjunyao/tmp/smpl/SMPL_SUBDIV_TRANSFORM.mat'
+        pdist_matrix_fpath = '/home/sunjunyao/tmp/smpl/Pdist_matrix.pkl'
         SMPL_subdiv = loadmat(smpl_subdiv_fpath)
         PDIST_transform = loadmat(pdist_transform_fpath)["index"].astype(np.int32)
         self.PDIST_transform = torch.from_numpy(PDIST_transform.squeeze()).cuda()
@@ -54,6 +56,8 @@ class DensePoseScoringLoss:
     def __call__(
         self, proposals_with_gt: List[Instances], densepose_predictor_outputs: Any, densepose_scoring_predictor_outputs: Any, **kwargs
     ) -> LossDict:
+        if len(densepose_scoring_predictor_outputs) == 0:
+            return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
         if not len(proposals_with_gt):
             return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
 
@@ -88,7 +92,7 @@ class DensePoseScoringLoss:
 
     def produce_fake_densepose_scoring_losses(self, densepose_scoring_predictor_outputs: Any) -> LossDict:
         return {
-            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score * 0,
+            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
         }
 
     def produce_densepose_scoring_losses(
@@ -110,7 +114,7 @@ class DensePoseScoringLoss:
         # print(score_gt)
 
         return {
-            "loss_densepose_score": l2_loss(score_est, score_gt) * self.loss_weight,
+            "loss_densepose_score": vfocal_loss(score_est, score_gt) * self.loss_weight,
         }
     
     def getDensePoseScore(
@@ -138,7 +142,7 @@ class DensePoseScoringLoss:
         point_bbox_indices = packed_annotations.point_bbox_indices[j_valid_fg]
         bbox_indices = packed_annotations.bbox_indices
         # bbox_indices_valid = torch.ones_like(bbox_indices)
-        score_gt = torch.zeros_like(bbox_indices, dtype=torch.float64)
+        score_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
         for i_bbox, bbox_index in enumerate(bbox_indices):
             i_point_indices = ((point_bbox_indices == bbox_index).nonzero(as_tuple=True)[0])
             if len(i_point_indices) == 0:
