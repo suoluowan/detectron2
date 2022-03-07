@@ -209,6 +209,8 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
         scores = instances.densepose_scores.tolist()
     else:
         scores = instances.scores.tolist()
+    # scores = instances.scores.tolist()
+    instances.scores.tolist()
     classes = instances.pred_classes.tolist()
     raw_boxes_xywh = BoxMode.convert(
         instances.pred_boxes.tensor.clone(), BoxMode.XYXY_ABS, BoxMode.XYWH_ABS
