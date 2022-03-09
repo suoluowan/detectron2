@@ -73,9 +73,6 @@ class DensePoseFCHead(nn.Module):
         Result:
             A tensor of DensePose head outputs
         """
-        if features.size(0) == 0:
-            print(features.size())
-            return features
         densepose_output = torch.cat((densepose_predictor_outputs.fine_segm, densepose_predictor_outputs.u, densepose_predictor_outputs.v), 1)
         densepose_output = F.max_pool2d(densepose_output, kernel_size=self.down_scale, stride=self.down_scale)
         x = torch.cat((features, densepose_output), 1)

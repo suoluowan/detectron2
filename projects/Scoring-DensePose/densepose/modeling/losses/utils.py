@@ -460,17 +460,21 @@ def gfocal_loss(input, target, beta=2.0):
     pred_sigmoid = torch.sigmoid(input)
     scale_factor = pred_sigmoid
     zeroslabel = scale_factor.new_zeros(input.shape)
-    loss = F.binary_cross_entropy_with_logits(input, zeroslabel, reduction='none')*scale_factor
+    loss = F.binary_cross_entropy_with_logits(input, zeroslabel, reduction='none')*scale_factor.pow(beta)
     pos_inds = torch.nonzero(target > 0.0).squeeze(1)
     scale_factor = target[pos_inds] - pred_sigmoid[pos_inds]
     loss[pos_inds] = F.binary_cross_entropy_with_logits(input[pos_inds], target[pos_inds], reduction='none') * scale_factor.abs().pow(beta)
     return loss.sum()
 def vfocal_loss(input, target, alpha=0.75, beta=2.0):
     pred_sigmoid = torch.sigmoid(input)
-    scale_factor = pred_sigmoid
-    zeroslabel = scale_factor.new_zeros(input.shape)
-    loss = torch.log(1-pred_sigmoid)*scale_factor.pow(beta)*(-alpha)
-    pos_inds = torch.nonzero(target > 0.0).squeeze(1)
-    scale_factor = target[pos_inds]
-    loss[pos_inds] = F.binary_cross_entropy_with_logits(input[pos_inds], target[pos_inds], reduction='none') * scale_factor
+    target = target.type_as(input)
+    focal_weight = target * (target > 0.0).float() + alpha * (pred_sigmoid - target).abs().pow(beta) * (target <= 0.0).float()
+    loss = F.binary_cross_entropy_with_logits(input, target, reduction='none') * focal_weight
+
+    # scale_factor = pred_sigmoid
+    # zeroslabel = scale_factor.new_zeros(input.shape)
+    # loss = F.binary_cross_entropy_with_logits(input, zeroslabel, reduction='none')*scale_factor.pow(beta)*alpha
+    # pos_inds = torch.nonzero(target > 0.0).squeeze(1)
+    # scale_factor = target[pos_inds]
+    # loss[pos_inds] = F.binary_cross_entropy_with_logits(input[pos_inds], target[pos_inds], reduction='none') * scale_factor
     return loss.sum()

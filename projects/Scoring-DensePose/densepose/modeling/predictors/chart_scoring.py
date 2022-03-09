@@ -28,11 +28,6 @@ class DensePoseScoringPredictor(nn.Module):
 
 
     def forward(self, head_outputs: torch.Tensor):
-        if head_outputs.size(0) == 0:
-            print(head_outputs.size())
-            return DensePoseScoringPredictorOutput(
-            densepose_score=head_outputs,
-            )
         return DensePoseScoringPredictorOutput(
             densepose_score=self.scoring_lowres(head_outputs),
         )
