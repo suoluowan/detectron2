@@ -26,11 +26,12 @@ class DensePoseFCHead(nn.Module):
         kernel_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.CONV_HEAD_KERNEL
         heatmap_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.HEATMAP_SIZE
         dim_out_patches = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_PATCHES + 1
+        n_segm_chan = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_COARSE_SEGM_CHANNELS
         pool_resolution = cfg.MODEL.ROI_DENSEPOSE_HEAD.POOLER_RESOLUTION
         self.down_scale = heatmap_size // pool_resolution
         # fmt: on
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        n_channels = input_channels + dim_out_patches*3
+        n_channels = input_channels + dim_out_patches*3+n_segm_chan
         pad_size = kernel_size // 2
         for i in range(self.n_stacked_convs):
             layer = Conv2d(n_channels, hidden_dim, kernel_size, stride=1, padding=pad_size)
@@ -73,7 +74,7 @@ class DensePoseFCHead(nn.Module):
         Result:
             A tensor of DensePose head outputs
         """
-        densepose_output = torch.cat((densepose_predictor_outputs.fine_segm, densepose_predictor_outputs.u, densepose_predictor_outputs.v), 1)
+        densepose_output = torch.cat((densepose_predictor_outputs.coarse_segm, densepose_predictor_outputs.fine_segm, densepose_predictor_outputs.u, densepose_predictor_outputs.v), 1)
         densepose_output = F.max_pool2d(densepose_output, kernel_size=self.down_scale, stride=self.down_scale)
         x = torch.cat((features, densepose_output), 1)
         for i in range(self.n_stacked_convs):

@@ -114,7 +114,7 @@ class DensePoseScoringLoss:
         # print(score_gt)
 
         return {
-            "loss_densepose_score": vfocal_loss(score_est, score_gt) * self.loss_weight,
+            "loss_densepose_score": l2_loss(score_est, score_gt) * self.loss_weight,
         }
     
     def getDensePoseScore(
@@ -176,7 +176,7 @@ class DensePoseScoringLoss:
                 Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
                 ClosestVerts[Index_points == (i + 1)] = Current_Part_ClosestVertInds[
-                        torch.argmin(D.squeeze().float(), axis=0)]
+                        torch.argmin(D.squeeze(1).float(), axis=0)]
         #
         ClosestVertsGT = torch.ones(I_gt.shape).cuda() * -1
         for i in range(24):
@@ -187,7 +187,7 @@ class DensePoseScoringLoss:
                 Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
                 Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
-                ClosestVertsGT[I_gt == (i + 1)] = Current_Part_ClosestVertInds[torch.argmin(D.squeeze().float(), axis=0)]
+                ClosestVertsGT[I_gt == (i + 1)] = Current_Part_ClosestVertInds[torch.argmin(D.squeeze(1).float(), axis=0)]
 
         return ClosestVerts, ClosestVertsGT
 
@@ -217,8 +217,7 @@ class DensePoseScoringLoss:
         cVerts_max = torch.max(cVertsGT_filter, cVerts_filter)
         cVerts_min = torch.min(cVertsGT_filter, cVerts_filter)
         dist_matrix = torch.true_divide(cVerts_max*(cVerts_max-1), 2) + cVerts_min
-        
-        dists[cVerts_filter != cVertsGT_filter] = self.Pdist_matrix[dist_matrix[cVerts_filter != cVertsGT_filter].long()].squeeze()
+        dists[cVerts_filter != cVertsGT_filter] = self.Pdist_matrix[dist_matrix[cVerts_filter != cVertsGT_filter].long()].squeeze(1)
         dists = dists*oulter - (oulter-1.)*3.
         return dists
         # return torch.from_numpy(np.atleast_1d(np.array(dists.cpu()).squeeze())).float().cuda()
