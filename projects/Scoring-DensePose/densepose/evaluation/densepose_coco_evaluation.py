@@ -828,18 +828,27 @@ class DensePoseCocoEval(object):
                 if len(self.ious[imgId, catId]) > 0
                 else self.ious[imgId, catId]
             )
+            # dt_gps_max = np.max(ious, axis=1)
+            # dt_bbox_score = [d["score"] for d in dt]
+            # dt_score = np.sqrt(dt_gps_max*dt_bbox_score)
+            # dtind_gps = np.argsort(-dt_score, kind="mergesort")
+            # dt = [dt[i] for i in dtind_gps[0:maxDet]]
+            # ious = ious[dtind_gps]
+            # ioubs = ioubs[dtind_gps]
             if self._dpEvalMode in {DensePoseEvalMode.GPSM, DensePoseEvalMode.IOU}:
                 iousM = (
                     self.real_ious[imgId, catId][:, gtind]
                     if len(self.real_ious[imgId, catId]) > 0
                     else self.real_ious[imgId, catId]
                 )
+                # iousM = iousM[dtind_gps]
         else:
             ious = (
                 self.ious[imgId, catId][:, gtind]
                 if len(self.ious[imgId, catId]) > 0
                 else self.ious[imgId, catId]
             )
+        
 
         T = len(p.iouThrs)
         G = len(gt)
@@ -925,6 +934,7 @@ class DensePoseCocoEval(object):
             "dtMatches": dtm,
             "gtMatches": gtm,
             "dtScores": [d["score"] for d in dt],
+            # "dtScores": dt_gps_max[dtind_gps],
             "gtIgnore": gtIg,
             "dtIgnore": dtIg,
         }
