@@ -166,6 +166,7 @@ class DensePoseScoringLoss:
     def findAllClosestVerts(self, U_gt, V_gt, I_gt, U_points, V_points, Index_points):
 
         ClosestVerts = torch.ones(Index_points.shape).cuda() * -1
+        ClosestVertsGT = torch.ones(I_gt.shape).cuda() * -1
         for i in range(24):
             #
             if (i + 1) in Index_points:
@@ -177,9 +178,6 @@ class DensePoseScoringLoss:
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
                 ClosestVerts[Index_points == (i + 1)] = Current_Part_ClosestVertInds[
                         torch.argmin(D.squeeze(1).float(), axis=0)]
-        #
-        ClosestVertsGT = torch.ones(I_gt.shape).cuda() * -1
-        for i in range(24):
             if (i + 1) in I_gt:
                 UVs = torch.stack((U_gt[I_gt == (i + 1)], V_gt[I_gt == (i + 1)]), dim=1)
                 if len(UVs.shape) == 1:
@@ -188,6 +186,17 @@ class DensePoseScoringLoss:
                 Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
                 ClosestVertsGT[I_gt == (i + 1)] = Current_Part_ClosestVertInds[torch.argmin(D.squeeze(1).float(), axis=0)]
+        #
+        # ClosestVertsGT = torch.ones(I_gt.shape).cuda() * -1
+        # for i in range(24):
+        #     if (i + 1) in I_gt:
+        #         UVs = torch.stack((U_gt[I_gt == (i + 1)], V_gt[I_gt == (i + 1)]), dim=1)
+        #         if len(UVs.shape) == 1:
+        #             UVs = UVs.unsqueeze(axis=1)
+        #         Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
+        #         Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
+        #         D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
+        #         ClosestVertsGT[I_gt == (i + 1)] = Current_Part_ClosestVertInds[torch.argmin(D.squeeze(1).float(), axis=0)]
 
         return ClosestVerts, ClosestVertsGT
 

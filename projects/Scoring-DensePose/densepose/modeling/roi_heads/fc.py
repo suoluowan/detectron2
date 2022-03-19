@@ -19,25 +19,32 @@ class DensePoseFCHead(nn.Module):
     def __init__(self, cfg: CfgNode, input_channels: int):
 
         super(DensePoseFCHead, self).__init__()
-        # fmt: off
-        hidden_dim = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.HIDDEN_DIM
+        
         self.n_stacked_fcs = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.NUM_STACKED_FCS
         self.n_stacked_convs = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.NUM_STACKED_CONVS
+        
+        hidden_dim = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.HIDDEN_DIM
         kernel_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.CONV_HEAD_KERNEL
+        pad_size = kernel_size // 2
+        # input channel
         heatmap_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.HEATMAP_SIZE
         dim_out_patches = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_PATCHES + 1
         n_segm_chan = cfg.MODEL.ROI_DENSEPOSE_HEAD.NUM_COARSE_SEGM_CHANNELS
+        n_channels = input_channels + dim_out_patches*3
+
+        score_pool_resolution = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.POOLER_RESOLUTION
+
         pool_resolution = cfg.MODEL.ROI_DENSEPOSE_HEAD.POOLER_RESOLUTION
         self.down_scale = heatmap_size // pool_resolution
-        # fmt: on
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
-        n_channels = input_channels + dim_out_patches*3+n_segm_chan
-        pad_size = kernel_size // 2
+        
         for i in range(self.n_stacked_convs):
             layer = Conv2d(n_channels, hidden_dim, kernel_size, stride=1, padding=pad_size)
             layer_name = self._get_layer_name(i)
             self.add_module(layer_name, layer)
             n_channels = hidden_dim
+        self.avgpool = nn.AdaptiveAvgPool2d(score_pool_resolution)
+        n_channels = n_channels * score_pool_resolution * score_pool_resolution
+        hidden_dim = n_channels
         for i in range(self.n_stacked_fcs):
             layer = nn.Linear(n_channels, hidden_dim)
             layer_name = self._get_fc_layer_name(i)
@@ -74,9 +81,9 @@ class DensePoseFCHead(nn.Module):
         Result:
             A tensor of DensePose head outputs
         """
-        densepose_output = torch.cat((densepose_predictor_outputs.coarse_segm, densepose_predictor_outputs.fine_segm, densepose_predictor_outputs.u, densepose_predictor_outputs.v), 1)
+        densepose_output = torch.cat((densepose_predictor_outputs.fine_segm, densepose_predictor_outputs.u, densepose_predictor_outputs.v), 1)
         densepose_output = F.max_pool2d(densepose_output, kernel_size=self.down_scale, stride=self.down_scale)
-        x = torch.cat((features, densepose_output), 1)
+        x = torch.cat((features, densepose_output.detach()), 1)
         for i in range(self.n_stacked_convs):
             layer_name = self._get_layer_name(i)
             x = getattr(self, layer_name)(x)
