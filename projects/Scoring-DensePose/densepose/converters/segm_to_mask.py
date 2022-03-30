@@ -152,3 +152,34 @@ def predictor_output_with_fine_and_coarse_segm_to_mask(
         x, y, w, h = box_xywh
         masks[i, y : y + h, x : x + w] = labels_i > 0
     return BitMasks(masks)
+
+def resample_densepose_scores_segm_to_score(
+    densepose_score: torch.Tensor, predictor_output: Any, boxes: Boxes
+):
+    """
+    Resample fine and coarse segmentation tensors to the given
+    bounding box and derive labels for each pixel of the bounding box
+
+    Args:
+        fine_segm: float tensor of shape [1, C, Hout, Wout]
+        coarse_segm: float tensor of shape [1, K, Hout, Wout]
+        box_xywh_abs (tuple of 4 int): bounding box given by its upper-left
+            corner coordinates, width (W) and height (H)
+    Return:
+        Labels for each pixel of the bounding box, a long tensor of size [1, H, W]
+    """
+    boxes_xyxy_abs = boxes.tensor.clone()
+    boxes_xywh_abs = BoxMode.convert(boxes_xyxy_abs, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
+    box_xywh = make_int_box(boxes_xywh_abs[0])
+    x, y, w, h = box_xywh
+    w = max(int(w), 1)
+    h = max(int(h), 1)
+
+    coarse_segm = predictor_output.coarse_segm
+    coarse_segm_bbox = F.interpolate(
+        coarse_segm, (h, w), mode="bilinear", align_corners=False
+    ).argmax(dim=1)
+    
+    densepose_score_bbox = F.interpolate(densepose_score.unsqueeze(0), (h, w), mode="bilinear", align_corners=False).squeeze(1)
+    scores = torch.sum(densepose_score_bbox * (coarse_segm_bbox > 0).long(), (1,2)) / torch.sum((coarse_segm_bbox > 0), (1,2))
+    return scores.squeeze()

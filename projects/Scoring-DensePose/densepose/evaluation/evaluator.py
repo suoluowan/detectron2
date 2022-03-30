@@ -23,7 +23,7 @@ from detectron2.utils.comm import gather, get_rank, is_main_process, synchronize
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.logger import create_small_table
 
-from densepose.converters import ToChartResultConverter, ToMaskConverter
+from densepose.converters import ToChartResultConverter, ToMaskConverter, resample_densepose_scores_segm_to_score
 from densepose.data.datasets.coco import maybe_filter_and_map_categories_cocoapi
 from densepose.structures import (
     DensePoseChartPredictorOutput,
@@ -203,14 +203,14 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
 
     Returns:
         list[dict]: the results in densepose evaluation format
-    """
-    
-    if instances.has("densepose_scores"):
-        scores = instances.densepose_scores.tolist()
-    else:
-        scores = instances.scores.tolist()
+    # """
+    # if instances.has("densepose_scores"):
+    #     scores = instances.densepose_scores.tolist()
+    # else:
+    #     scores = instances.scores.tolist()
+    scores = instances.scores.tolist()
     # scores = instances.scores.tolist()
-    instances.scores.tolist()
+    # instances.scores.tolist()
     classes = instances.pred_classes.tolist()
     raw_boxes_xywh = BoxMode.convert(
         instances.pred_boxes.tensor.clone(), BoxMode.XYXY_ABS, BoxMode.XYWH_ABS
@@ -234,6 +234,9 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
             "bbox": raw_boxes_xywh[k].tolist(),
             "score": scores[k],
         }
+        if instances.has("densepose_scores"):
+            densepose_score = results_densepose[k]["densepose_score"]
+            result["score"] = torch.sqrt(scores[k]*densepose_score)
         results.append({**result, **results_densepose[k]})
     return results
 
@@ -256,9 +259,12 @@ def densepose_chart_predictions_to_dict(instances):
             np.require(segmentation.numpy(), dtype=np.uint8, requirements=["F"])
         )
         segmentation_encoded["counts"] = segmentation_encoded["counts"].decode("utf-8")
+        if instances.has("densepose_scores"):
+            densepose_score = resample_densepose_scores_segm_to_score(instances.densepose_scores[k], instances.pred_densepose[k], instances.pred_boxes[k])
         result = {
             "densepose": densepose_results_quantized,
             "segmentation": segmentation_encoded,
+            "densepose_score": densepose_score,
         }
         # if instances.has("densepose_scores"):
         #     result.update({"dp_scores": instances.densepose_scores[k].squeeze(0).cpu()})

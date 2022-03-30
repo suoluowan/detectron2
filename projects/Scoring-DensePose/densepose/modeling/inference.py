@@ -55,4 +55,6 @@ def densepose_inference(densepose_predictor_output: Any, detections: List[Instan
             # print(output_i_score_dict["densepose_score"].squeeze(1))
             # detection_i.densepose_scores = torch.sigmoid(output_i_score_dict["densepose_score"].squeeze(1))
             # detection_i.densepose_scores = torch.sqrt(detection_i.scores * torch.sigmoid(output_i_score_dict["densepose_score"]).squeeze())
+            # detection_i.densepose_scores = detection_i.scores*0.5 + torch.sigmoid(output_i_score_dict["densepose_score"]).squeeze()*0.5
+            detection_i.densepose_scores = output_i_score_dict["densepose_score"]
         k += n_i
