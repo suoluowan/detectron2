@@ -445,7 +445,7 @@ def l2_loss(input, target):
     very similar to the smooth_l1_loss from pytorch, but with
     the extra beta parameter
     """
-    pos_inds = torch.nonzero(target > 0.0).squeeze(1)
+    pos_inds = torch.nonzero(target >= 0.0).squeeze(1)
     if pos_inds.shape[0] > 0:
         # pos_est = input[pos_inds]
         # pos_gt = target[pos_inds]

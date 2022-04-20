@@ -209,8 +209,7 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
     # else:
     #     scores = instances.scores.tolist()
     scores = instances.scores.tolist()
-    # scores = instances.scores.tolist()
-    # instances.scores.tolist()
+
     classes = instances.pred_classes.tolist()
     raw_boxes_xywh = BoxMode.convert(
         instances.pred_boxes.tensor.clone(), BoxMode.XYXY_ABS, BoxMode.XYWH_ABS
@@ -236,7 +235,7 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
         }
         if instances.has("densepose_scores"):
             densepose_score = results_densepose[k]["densepose_score"]
-            result["score"] = torch.sqrt(scores[k]*densepose_score)
+            result["score"] = 0.9*scores[k]+0.1*densepose_score
         results.append({**result, **results_densepose[k]})
     return results
 
@@ -259,15 +258,15 @@ def densepose_chart_predictions_to_dict(instances):
             np.require(segmentation.numpy(), dtype=np.uint8, requirements=["F"])
         )
         segmentation_encoded["counts"] = segmentation_encoded["counts"].decode("utf-8")
-        if instances.has("densepose_scores"):
-            densepose_score = resample_densepose_scores_segm_to_score(instances.densepose_scores[k], instances.pred_densepose[k], instances.pred_boxes[k])
+        
         result = {
             "densepose": densepose_results_quantized,
             "segmentation": segmentation_encoded,
-            "densepose_score": densepose_score,
+            # "densepose_score": densepose_score,
         }
-        # if instances.has("densepose_scores"):
-        #     result.update({"dp_scores": instances.densepose_scores[k].squeeze(0).cpu()})
+        if instances.has("densepose_scores"):
+            densepose_score = resample_densepose_scores_segm_to_score(instances.densepose_scores[k], instances.pred_densepose[k], instances.pred_boxes[k])
+            result.update({"densepose_score": densepose_score/10.})
         results.append(result)
     return results
 

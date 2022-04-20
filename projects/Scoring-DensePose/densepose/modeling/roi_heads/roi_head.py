@@ -174,17 +174,13 @@ class DensePoseROIHeads(StandardROIHeads):
                     proposals, densepose_predictor_outputs, embedder=self.embedder
                 )
                 if self.scoring_on:
-                    if densepose_head_outputs.size(0) == 0:
-                        # densepose_scoring_loss_dict = {
-                        #     "loss_densepose_score": densepose_predictor_outputs.u.sum() * 0,
-                        #     }
-                        # print(densepose_scoring_loss_dict)
-                        print(densepose_loss_dict)
-                        return densepose_loss_dict
-                    else:
-                        densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs,densepose_predictor_outputs)
-                        densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs)
-                        densepose_scoring_loss_dict = self.scoring_losses(proposals, densepose_predictor_outputs, densepose_scoring_predictor_outputs, embedder=self.embedder)
+                    # if densepose_head_outputs.size(0) == 0:
+                    #     print(densepose_loss_dict)
+                    #     return densepose_loss_dict
+                    # else:
+                    densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs, densepose_predictor_outputs)
+                    densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs)
+                    densepose_scoring_loss_dict = self.scoring_losses(proposals, densepose_predictor_outputs, densepose_scoring_predictor_outputs, embedder=self.embedder)
                     # print(densepose_scoring_loss_dict)
                     densepose_loss_dict.update(densepose_scoring_loss_dict)
                 return densepose_loss_dict
@@ -201,7 +197,7 @@ class DensePoseROIHeads(StandardROIHeads):
                 densepose_head_outputs = self.densepose_head(features_dp)
                 densepose_predictor_outputs = self.densepose_predictor(densepose_head_outputs)
                 if self.scoring_on:
-                    densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs,densepose_predictor_outputs)
+                    densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs, densepose_predictor_outputs)
                     densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs)
             else:
                 densepose_predictor_outputs = None

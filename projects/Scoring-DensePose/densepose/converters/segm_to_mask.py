@@ -181,5 +181,5 @@ def resample_densepose_scores_segm_to_score(
     ).argmax(dim=1)
     
     densepose_score_bbox = F.interpolate(densepose_score.unsqueeze(0), (h, w), mode="bilinear", align_corners=False).squeeze(1)
-    scores = torch.sum(densepose_score_bbox * (coarse_segm_bbox > 0).long(), (1,2)) / torch.sum((coarse_segm_bbox > 0), (1,2))
+    scores = torch.sum(densepose_score_bbox.argmax(dim=1) * (coarse_segm_bbox > 0).long(), (1,2)) / torch.sum((coarse_segm_bbox > 0), (1,2))
     return scores.squeeze()

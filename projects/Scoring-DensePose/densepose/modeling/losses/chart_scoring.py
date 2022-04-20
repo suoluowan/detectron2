@@ -17,6 +17,7 @@ from .utils import (
     l2_loss,
     gfocal_loss,
     vfocal_loss,
+    resample_data,
 )
 
 import scipy.spatial.distance as ssd
@@ -30,6 +31,10 @@ class DensePoseScoringLoss:
 
     def __init__(self, cfg: CfgNode):
         self.loss_weight     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT
+        self.heatmap_size = cfg.MODEL.ROI_DENSEPOSE_HEAD.HEATMAP_SIZE
+        self.loss_weight_instance     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT
+        self.loss_weight_point     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT_POINT
+        self.score_cls_num = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.SCORING_CLS_NUM
 
         smpl_subdiv_fpath = '/home/sunjunyao/tmp/smpl/SMPL_subdiv.mat'
         pdist_transform_fpath = '/home/sunjunyao/tmp/smpl/SMPL_SUBDIV_TRANSFORM.mat'
@@ -91,8 +96,14 @@ class DensePoseScoringLoss:
         return {**losses_score}
 
     def produce_fake_densepose_scoring_losses(self, densepose_scoring_predictor_outputs: Any) -> LossDict:
+        # return {
+        #     "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+        # }
+
         return {
-            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+        #     "loss_densepose_score_point": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+        #     "loss_densepose_score_instance": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,   
         }
 
     def produce_densepose_scoring_losses(
@@ -104,19 +115,64 @@ class DensePoseScoringLoss:
         interpolator: BilinearInterpolationHelper,
         j_valid_fg: torch.Tensor,
     ) -> LossDict:
+        # score_est = densepose_scoring_predictor_outputs.densepose_score
+        # bbox_indices = packed_annotations.bbox_indices
+        # score_gt = self.getDensePoseScore(densepose_predictor_outputs, packed_annotations, interpolator, j_valid_fg)
+        # score_est = score_est[bbox_indices].squeeze(1)
+
+        # return {
+        #     "loss_densepose_score": l2_loss(score_est, score_gt) * self.loss_weight,
+        #     # "loss_densepose_score": F.smooth_l1_loss(score_est, score_gt, reduction="sum") * self.loss_weight,
+        # }
+
         score_est = densepose_scoring_predictor_outputs.densepose_score
         bbox_indices = packed_annotations.bbox_indices
-        # print(score_est.shape)
-        score_gt = self.getDensePoseScore(densepose_predictor_outputs, packed_annotations, interpolator, j_valid_fg)
-        score_est = score_est[bbox_indices].squeeze(1)
-        # score_est = torch.exp(-(dist_est**2)/(2 * (0.255 ** 2)))
-        # print(score_est)
-        # print(score_gt)
-
+        score_est_point = interpolator.extract_at_points(
+            score_est,
+            slice_fine_segm=slice(None),
+            w_ylo_xlo=interpolator.w_ylo_xlo[:, None],  # pyre-ignore[16]
+            w_ylo_xhi=interpolator.w_ylo_xhi[:, None],  # pyre-ignore[16]
+            w_yhi_xlo=interpolator.w_yhi_xlo[:, None],  # pyre-ignore[16]
+            w_yhi_xhi=interpolator.w_yhi_xhi[:, None],  # pyre-ignore[16]
+        )[j_valid_fg, :].squeeze(1)
+        score_gt_instance, score_gt_point, index_valid = self.getDensePoseScore(densepose_predictor_outputs, packed_annotations, interpolator, j_valid_fg)
+        score_gt_point = torch.floor(score_gt_point*self.score_cls_num)
+        score_gt_point[score_gt_point>=self.score_cls_num] = self.score_cls_num - 1
+        score_est_point = score_est_point[index_valid]
+        # print(score_est_point.shape, torch.sum(score_gt_point<10))
+        # with torch.no_grad():
+        #     coarse_segm_gt = resample_data(
+        #         packed_annotations.coarse_segm_gt.unsqueeze(1),
+        #         packed_annotations.bbox_xywh_gt,
+        #         packed_annotations.bbox_xywh_est,
+        #         self.heatmap_size,
+        #         self.heatmap_size,
+        #         mode="nearest",
+        #         padding_mode="zeros",
+        #     )
+        # coarse_segm_gt = coarse_segm_gt > 0
+        # score_est_instance = torch.sum((score_est[bbox_indices]*coarse_segm_gt), (2,3))/torch.sum(coarse_segm_gt, (2,3))
+        # print(torch.sum((score_est[bbox_indices].squeeze(1))))
+        # print(torch.sum(coarse_segm_gt, (1,2)))
+        # print(score_est_instance, score_gt_instance)
+        # score_est_instance = score_est[bbox_indices]
         return {
-            "loss_densepose_score": l2_loss(score_est, score_gt) * self.loss_weight,
+            # "loss_densepose_score_point": l2_loss(score_est_point, score_gt_point) * self.loss_weight_point,
+            # "loss_densepose_score_instance": l2_loss(score_est_instance, score_gt_instance) * self.loss_weight_instance,
+            "loss_densepose_score": F.cross_entropy(score_est_point, score_gt_point.long()) * self.loss_weight_point,  
         }
-    
+
+        # focal loss
+        # pred_softmax = torch.softmax(score_est_point, axis=1)
+        # # pred_softmax = pred_softmax.gather(1,fine_segm_gt.view(-1,1)) 
+        # pred_softmax = F.nll_loss(pred_softmax, score_gt_point.long())
+        # preds_logsoft = F.cross_entropy(score_est_point, score_gt_point.long(), reduction='none')
+        # loss = torch.mul(torch.pow((1-pred_softmax), 2), preds_logsoft) 
+        # return {
+        #     "loss_densepose_score": loss.mean() * self.loss_weight_point,
+        #     }
+        
+
     def getDensePoseScore(
         self,
         densepose_predictor_outputs: Any,
@@ -124,10 +180,6 @@ class DensePoseScoringLoss:
         interpolator: BilinearInterpolationHelper,
         j_valid_fg: torch.Tensor,
     ):
-        u_gt = packed_annotations.u_gt[j_valid_fg]
-        u_est = interpolator.extract_at_points(densepose_predictor_outputs.u)[j_valid_fg].detach()
-        v_gt = packed_annotations.v_gt[j_valid_fg]
-        v_est = interpolator.extract_at_points(densepose_predictor_outputs.v)[j_valid_fg].detach()
         i_gt = packed_annotations.fine_segm_labels_gt[j_valid_fg]
         fine_segm_est = interpolator.extract_at_points(
             densepose_predictor_outputs.fine_segm,
@@ -136,32 +188,67 @@ class DensePoseScoringLoss:
             w_ylo_xhi=interpolator.w_ylo_xhi[:, None],  # pyre-ignore[16]
             w_yhi_xlo=interpolator.w_yhi_xlo[:, None],  # pyre-ignore[16]
             w_yhi_xhi=interpolator.w_yhi_xhi[:, None],  # pyre-ignore[16]
-        )[j_valid_fg, :].detach()
+        ).detach()
         i_est = torch.argmax(fine_segm_est, axis=1)
-        # print(i_est.shape)
+        u_gt = packed_annotations.u_gt[j_valid_fg]
+        u_est = interpolator.extract_at_points(
+            densepose_predictor_outputs.u,
+            # slice_fine_segm=i_est,
+            )[j_valid_fg].detach()
+        v_gt = packed_annotations.v_gt[j_valid_fg]
+        v_est = interpolator.extract_at_points(
+            densepose_predictor_outputs.v,
+            # slice_fine_segm=i_est,
+            )[j_valid_fg].detach()
+        i_est = i_est[j_valid_fg]
         point_bbox_indices = packed_annotations.point_bbox_indices[j_valid_fg]
         bbox_indices = packed_annotations.bbox_indices
-        # bbox_indices_valid = torch.ones_like(bbox_indices)
-        score_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
-        for i_bbox, bbox_index in enumerate(bbox_indices):
-            i_point_indices = ((point_bbox_indices == bbox_index).nonzero(as_tuple=True)[0])
-            if len(i_point_indices) == 0:
-                continue
-            i_u_gt = u_gt[i_point_indices]
-            i_v_gt = v_gt[i_point_indices]
-            i_i_gt = i_gt[i_point_indices]
-            i_u_est = u_est[i_point_indices]
-            i_v_est = v_est[i_point_indices]
-            i_i_est = i_est[i_point_indices]
-            cVerts, cVertsGT = self.findAllClosestVerts(i_u_gt,i_v_gt,i_i_gt,i_u_est,i_v_est,i_i_est)
-            dist = self.getDistances(cVertsGT, cVerts)
-            Current_Mean_Distances = torch.gather(self.mean_dist, 0, self.Part_ids[cVertsGT[cVertsGT > 0].long() - 1])
-            i_scores_gt = torch.exp(
-                            -(dist ** 2) / (2 * (Current_Mean_Distances ** 2))
-                        )
-            i_scores_gt[dist == 3.0] = 0
-            score_gt[i_bbox] = torch.mean(i_scores_gt)
-        return score_gt
+
+        cVerts, cVertsGT = self.findAllClosestVerts(u_gt,v_gt,i_gt,u_est,v_est,i_est)
+        dist,index_valid = self.getDistances(cVertsGT, cVerts)
+        Current_Mean_Distances = torch.gather(self.mean_dist, 0, self.Part_ids[cVertsGT[index_valid].long() - 1])
+        scores_gt_point = torch.exp(-(dist ** 2) / (2 * (Current_Mean_Distances ** 2)))
+        scores_gt_point[dist == 3.0] = 0
+        point_bbox_indices = point_bbox_indices[index_valid]
+        score_gt_instance = torch.zeros_like(bbox_indices, dtype=torch.float32)
+        # print("densepose_predictor_outputs.fine_segm", torch.sum(torch.isnan(densepose_predictor_outputs.fine_segm)), densepose_predictor_outputs.fine_segm.size())
+        # print("fine_segm_est", torch.sum(torch.isnan(fine_segm_est)), fine_segm_est.size())
+        # print("i_est", i_est)
+        # print("cVerts", cVerts)
+        # print("index_valid", index_valid)
+        # print("bbox_indices", bbox_indices)
+        
+        # for i_bbox, bbox_index in enumerate(bbox_indices):
+        #     i_point_indices = ((point_bbox_indices == bbox_index).nonzero(as_tuple=True)[0])
+        #     # print(len(i_point_indices))
+        #     if len(i_point_indices) == 0:
+        #         continue
+        #     # score_gt_instance[i_bbox] = torch.mean(scores_gt_point[i_point_indices])
+        #     score_gt_instance[i_bbox] = torch.mean(scores_gt_point[i_point_indices])
+        return score_gt_instance, scores_gt_point, index_valid
+
+        # score_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
+        # for i_bbox, bbox_index in enumerate(bbox_indices):
+        #     i_point_indices = ((point_bbox_indices == bbox_index).nonzero(as_tuple=True)[0])
+        #     if len(i_point_indices) == 0:
+        #         continue
+        #     i_u_gt = u_gt[i_point_indices]
+        #     i_v_gt = v_gt[i_point_indices]
+        #     i_i_gt = i_gt[i_point_indices]
+        #     i_u_est = u_est[i_point_indices]
+        #     i_v_est = v_est[i_point_indices]
+        #     i_i_est = i_est[i_point_indices]
+        #     cVerts, cVertsGT = self.findAllClosestVerts(i_u_gt,i_v_gt,i_i_gt,i_u_est,i_v_est,i_i_est)
+        #     dist,index_valid = self.getDistances(cVertsGT, cVerts)
+        #     Current_Mean_Distances = torch.gather(self.mean_dist, 0, self.Part_ids[cVertsGT[index_valid].long() - 1])
+        #     i_scores_gt = torch.exp(
+        #                     -(dist ** 2) / (2 * (Current_Mean_Distances ** 2))
+        #                 )
+        #     # i_scores_gt = dist / Current_Mean_Distances
+        #     # i_scores_gt[dist == 3.0] = 273
+        #     # print(np.array(i_scores_gt.cpu()).tolist())
+        #     score_gt[i_bbox] = torch.mean(i_scores_gt)
+        # return score_gt
     
     def findAllClosestVerts(self, U_gt, V_gt, I_gt, U_points, V_points, Index_points):
 
@@ -169,12 +256,14 @@ class DensePoseScoringLoss:
         ClosestVertsGT = torch.ones(I_gt.shape).cuda() * -1
         for i in range(24):
             #
+            Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
+            Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
             if (i + 1) in Index_points:
                 UVs = torch.stack(( U_points[Index_points == (i + 1)], V_points[Index_points == (i + 1)]), dim=1)
                 if len(UVs.shape) == 1:
                     UVs = UVs.unsqueeze(axis=1)
-                Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
-                Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
+                # Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
+                # Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
                 ClosestVerts[Index_points == (i + 1)] = Current_Part_ClosestVertInds[
                         torch.argmin(D.squeeze(1).float(), axis=0)]
@@ -182,8 +271,8 @@ class DensePoseScoringLoss:
                 UVs = torch.stack((U_gt[I_gt == (i + 1)], V_gt[I_gt == (i + 1)]), dim=1)
                 if len(UVs.shape) == 1:
                     UVs = UVs.unsqueeze(axis=1)
-                Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
-                Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
+                # Current_Part_UVs = torch.tensor(self.Part_UVs[i], dtype=torch.float64).cuda()
+                # Current_Part_ClosestVertInds = torch.tensor(self.Part_ClosestVertInds[i], dtype=torch.float32).cuda()
                 D = torch.cdist(Current_Part_UVs.transpose(1,0), UVs.double())
                 ClosestVertsGT[I_gt == (i + 1)] = Current_Part_ClosestVertInds[torch.argmin(D.squeeze(1).float(), axis=0)]
         #
@@ -211,8 +300,16 @@ class DensePoseScoringLoss:
         #
         cVertsGT = ClosestVertsGTTransformed.long()
         cVerts = ClosestVertsTransformed.long()
+        # print("ClosestVertsTransformed", np.array(cVerts.detach().cpu()).tolist())
+        # print("ClosestVertsGTTransformed", np.array(cVertsGT.detach().cpu()).tolist())
 
         index_cVertsGT = (cVertsGT > 0).nonzero().flatten().detach()
+
+        # index_cVerts = set(np.array((cVerts > 0).nonzero().flatten().detach().cpu()))
+        # index_valid = list(set(np.array(index_cVertsGT.cpu())) & index_cVerts)
+        # cVerts_filter = cVerts[index_valid]-1
+        # cVertsGT_filter = cVertsGT[index_valid]-1
+
         cVerts_filter = cVerts[index_cVertsGT]
         cVertsGT = cVertsGT[index_cVertsGT]
 
@@ -220,6 +317,10 @@ class DensePoseScoringLoss:
 
         cVerts_filter = (cVerts_filter - 1)*oulter
         cVertsGT_filter = (cVertsGT - 1)*oulter
+        
+        # index_cVerts_filter = (cVerts_filter > 0).nonzero().flatten().detach()
+        # cVerts_filter = cVerts[index_cVerts_filter]-1
+        # cVertsGT_filter = cVertsGT[index_cVerts_filter]-1
 
         dists = torch.zeros(len(cVerts_filter), dtype=torch.float32).cuda()
 
@@ -227,6 +328,6 @@ class DensePoseScoringLoss:
         cVerts_min = torch.min(cVertsGT_filter, cVerts_filter)
         dist_matrix = torch.true_divide(cVerts_max*(cVerts_max-1), 2) + cVerts_min
         dists[cVerts_filter != cVertsGT_filter] = self.Pdist_matrix[dist_matrix[cVerts_filter != cVertsGT_filter].long()].squeeze(1)
-        dists = dists*oulter - (oulter-1.)*3.
-        return dists
+        dists = dists*oulter - (oulter-1.)*3
+        return dists,index_cVertsGT
         # return torch.from_numpy(np.atleast_1d(np.array(dists.cpu()).squeeze())).float().cuda()
