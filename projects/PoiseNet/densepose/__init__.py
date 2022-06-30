@@ -12,6 +12,7 @@ from .config import (
 from .structures import DensePoseDataRelative, DensePoseList, DensePoseTransformData
 from .evaluation import DensePoseCOCOEvaluator
 from .modeling.roi_heads import DensePoseROIHeads
+from .modeling.backbone import build_vovnet_fpn_backbone, build_vovnet_backbone
 from .modeling.test_time_augmentation import (
     DensePoseGeneralizedRCNNWithTTA,
     DensePoseDatasetMapperTTA,

@@ -1,0 +1,28 @@
+_BASE_: "Base-RCNN-VoVNet-FPN.yaml"
+MODEL:
+  WEIGHTS: "/home/sunjunyao/code/Model/pretrained_model/vovnet57_ese_detectron2.pth"
+  VOVNET:
+    CONV_BODY : "V-57-eSE"
+  ROI_DENSEPOSE_HEAD:
+    NAME: "DensePoseDeepLabHead"
+    # PART_WEIGHTS: 0.5
+    INDEX_WEIGHTS: 2.5
+    PREDICTOR_NAME: "PoiseNetPredictor"
+    LOSS_NAME: "DensePosePoiseNetLoss"
+    PART_WEIGHTS: 0.001
+  POISENET:
+    BLOCK_FPATH: "/home/sunjunyao/code/Model/pretrained_model/block-2.json"
+    BLOCK_NUM: 2
+    PART_LOSS_TYPE: "AEQL"
+    FREQ_CLASSES: [7,8,11,12]
+    POISE_CLS_WEIGHTS: 0.0005
+    POISE_REGRESSION_WEIGHTS: 0.01
+SEED: 35409553
+# DATASETS:
+#   TRAIN: ("densepose_chimps_train",)
+#   TEST: ("densepose_chimps_val",)
+SOLVER:
+  MAX_ITER: 130000
+  STEPS: (100000, 120000)
+  # IMS_PER_BATCH: 4
+OUTPUT_DIR: "./output/densepose_rcnn_V_57-FPN-DL_s1x_8gpu_aeql-norm-8-0.001_sabl2(even)-0.05+1_35409553/"
