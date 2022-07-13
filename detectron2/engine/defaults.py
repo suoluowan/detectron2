@@ -72,6 +72,7 @@ def create_ddp_model(model, *, fp16_compression=False, **kwargs):
     if "device_ids" not in kwargs:
         kwargs["device_ids"] = [comm.get_local_rank()]
     ddp = DistributedDataParallel(model, **kwargs)
+    ddp.update_temperature = model.update_temperature
     if fp16_compression:
         from torch.distributed.algorithms.ddp_comm_hooks import default as comm_hooks
 
@@ -378,6 +379,9 @@ class DefaultTrainer(TrainerBase):
         data_loader = self.build_train_loader(cfg)
 
         model = create_ddp_model(model, broadcast_buffers=False)
+        # self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else SimpleTrainer)(
+        #     model, data_loader, optimizer, cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.DYNAMIC
+        # )
         self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else SimpleTrainer)(
             model, data_loader, optimizer
         )

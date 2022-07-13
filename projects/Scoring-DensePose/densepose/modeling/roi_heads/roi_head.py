@@ -24,6 +24,7 @@ from .. import (
     build_densepose_scoring_predictor,
     build_densepose_scoring_losses,
 )
+from .dynamic_conv import Dynamic_conv2d
 
 
 class Decoder(nn.Module):
@@ -179,7 +180,8 @@ class DensePoseROIHeads(StandardROIHeads):
                     #     return densepose_loss_dict
                     # else:
                     densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs, densepose_predictor_outputs)
-                    densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs)
+                    # densepose_scoring_head_outputs = self.scoring_head(densepose_scoring_head_outputs, densepose_predictor_outputs)
+                    densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs,densepose_predictor_outputs)
                     densepose_scoring_loss_dict = self.scoring_losses(proposals, densepose_predictor_outputs, densepose_scoring_predictor_outputs, embedder=self.embedder)
                     # print(densepose_scoring_loss_dict)
                     densepose_loss_dict.update(densepose_scoring_loss_dict)
@@ -198,7 +200,8 @@ class DensePoseROIHeads(StandardROIHeads):
                 densepose_predictor_outputs = self.densepose_predictor(densepose_head_outputs)
                 if self.scoring_on:
                     densepose_scoring_head_outputs = self.scoring_head(densepose_head_outputs, densepose_predictor_outputs)
-                    densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs)
+                    # densepose_scoring_head_outputs = self.scoring_head(densepose_scoring_head_outputs, densepose_predictor_outputs)
+                    densepose_scoring_predictor_outputs = self.scoring_predictor(densepose_scoring_head_outputs,densepose_predictor_outputs)
             else:
                 densepose_predictor_outputs = None
             
@@ -243,3 +246,8 @@ class DensePoseROIHeads(StandardROIHeads):
         instances = super().forward_with_given_boxes(features, instances)
         instances = self._forward_densepose(features, instances)
         return instances
+
+    def update_temperature(self):
+        for m in self.modules():
+            if isinstance(m, Dynamic_conv2d):
+                m.update_temperature()

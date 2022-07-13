@@ -232,7 +232,7 @@ class SimpleTrainer(TrainerBase):
     or write your own training loop.
     """
 
-    def __init__(self, model, data_loader, optimizer):
+    def __init__(self, model, data_loader, optimizer, dynamic=False):
         """
         Args:
             model: a torch Module. Takes a data from data_loader and returns a
@@ -254,6 +254,7 @@ class SimpleTrainer(TrainerBase):
         self.data_loader = data_loader
         self._data_loader_iter = iter(data_loader)
         self.optimizer = optimizer
+        self.dynamic = dynamic
 
     def run_step(self):
         """
@@ -292,6 +293,8 @@ class SimpleTrainer(TrainerBase):
         suboptimal as explained in https://arxiv.org/abs/2006.15704 Sec 3.2.4
         """
         self.optimizer.step()
+        if self.dynamic and ((self.iter+1) % 10000 == 0):
+            self.model.update_temperature()
 
     def _write_metrics(
         self,

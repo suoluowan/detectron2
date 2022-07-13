@@ -83,6 +83,9 @@ class GeneralizedRCNN(nn.Module):
     @property
     def device(self):
         return self.pixel_mean.device
+    
+    def update_temperature(self):
+        self.roi_heads.update_temperature()
 
     def visualize_training(self, batched_inputs, proposals):
         """
