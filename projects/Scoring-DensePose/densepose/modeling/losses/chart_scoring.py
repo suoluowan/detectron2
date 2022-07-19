@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from detectron2.config import CfgNode
 from detectron2.structures import Instances
 
-from .mask_or_segm import MaskOrSegmentationLoss
+from .segm_iou import SegmentationIoULoss
 from .registry import DENSEPOSE_LOSS_REGISTRY
 from .utils import (
     BilinearInterpolationHelper,
@@ -25,6 +25,7 @@ from scipy.io import loadmat
 import numpy as np
 import pickle
 import copy
+from pycm import *
 
 @DENSEPOSE_LOSS_REGISTRY.register()
 class DensePoseScoringLoss:
@@ -35,6 +36,11 @@ class DensePoseScoringLoss:
         self.loss_weight_instance     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT
         self.loss_weight_point     = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT_POINT
         self.score_cls_num = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.SCORING_CLS_NUM
+
+        self.segm_iou_loss = SegmentationIoULoss(cfg)
+        self.loss_weight_segm = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT_SEGM
+
+        self.loss_weight_acc = cfg.MODEL.ROI_DENSEPOSE_HEAD.SCORING.LOSS_WEIGHT_ACC
 
         smpl_subdiv_fpath = '/home/sunjunyao/tmp/smpl/SMPL_subdiv.mat'
         pdist_transform_fpath = '/home/sunjunyao/tmp/smpl/SMPL_SUBDIV_TRANSFORM.mat'
@@ -62,15 +68,15 @@ class DensePoseScoringLoss:
         self, proposals_with_gt: List[Instances], densepose_predictor_outputs: Any, densepose_scoring_predictor_outputs: Any, **kwargs
     ) -> LossDict:
         if len(densepose_scoring_predictor_outputs) == 0:
-            return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
+            return self.produce_fake_scoring_losses(densepose_scoring_predictor_outputs)
         if not len(proposals_with_gt):
-            return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
+            return self.produce_fake_scoring_losses(densepose_scoring_predictor_outputs)
 
         accumulator = ChartBasedAnnotationsAccumulator()
         packed_annotations = extract_packed_annotations_from_matches(proposals_with_gt, accumulator)
 
         if packed_annotations is None:
-            return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
+            return self.produce_fake_scoring_losses(densepose_scoring_predictor_outputs)
 
         h, w = densepose_predictor_outputs.u.shape[2:]
         interpolator = BilinearInterpolationHelper.from_matches(
@@ -82,9 +88,17 @@ class DensePoseScoringLoss:
             packed_annotations.fine_segm_labels_gt > 0
         )
         if not torch.any(j_valid_fg):
-            return self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
+            return self.produce_fake_scoring_losses(densepose_scoring_predictor_outputs)
 
-        losses_score = self.produce_densepose_scoring_losses(
+        losses_densepose_score = self.produce_densepose_scoring_losses(
+            proposals_with_gt,
+            densepose_predictor_outputs,
+            densepose_scoring_predictor_outputs,
+            packed_annotations,
+            interpolator,
+            j_valid_fg,  # pyre-ignore[6]
+        )
+        losses_mask_score = self.produce_mask_scoring_losses(
             proposals_with_gt,
             densepose_predictor_outputs,
             densepose_scoring_predictor_outputs,
@@ -93,7 +107,23 @@ class DensePoseScoringLoss:
             j_valid_fg,  # pyre-ignore[6]
         )
 
-        return {**losses_score}
+
+        return {
+            **losses_densepose_score, 
+            **losses_mask_score,
+        }
+
+    def produce_fake_scoring_losses(self, densepose_scoring_predictor_outputs: Any) -> LossDict:
+        # return {
+        #     "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+        # }
+        losses_densepose_score = self.produce_fake_densepose_scoring_losses(densepose_scoring_predictor_outputs)
+        losses_mask_score = self.produce_fake_mask_scoring_losses(densepose_scoring_predictor_outputs)
+
+        return {
+            **losses_densepose_score, 
+            **losses_mask_score,
+        }
 
     def produce_fake_densepose_scoring_losses(self, densepose_scoring_predictor_outputs: Any) -> LossDict:
         # return {
@@ -103,7 +133,18 @@ class DensePoseScoringLoss:
         return {
         #     "loss_densepose_score_point": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
         #     "loss_densepose_score_instance": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
-            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,   
+            "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0, 
+            "loss_i_score": densepose_scoring_predictor_outputs.i_score.sum() * 0, 
+            "loss_uv_score": densepose_scoring_predictor_outputs.uv_score.sum() * 0, 
+
+        }
+    def produce_fake_mask_scoring_losses(self, densepose_scoring_predictor_outputs: Any) -> LossDict:
+        # return {
+        #     "loss_densepose_score": densepose_scoring_predictor_outputs.densepose_score.sum() * 0,
+        # }
+
+        return {
+            "loss_mask_score": self.segm_iou_loss.fake_value(densepose_scoring_predictor_outputs),
         }
 
     def produce_densepose_scoring_losses(
@@ -135,9 +176,13 @@ class DensePoseScoringLoss:
             w_yhi_xlo=interpolator.w_yhi_xlo[:, None],  # pyre-ignore[16]
             w_yhi_xhi=interpolator.w_yhi_xhi[:, None],  # pyre-ignore[16]
         )[j_valid_fg, :].squeeze(1)
-        score_gt_instance, score_gt_point, index_valid = self.getDensePoseScore(densepose_predictor_outputs, packed_annotations, interpolator, j_valid_fg)
+        score_gt_instance, score_gt_point, index_valid, i_acc_gt, uv_acc_gt = self.getDensePoseScore(densepose_predictor_outputs, packed_annotations, interpolator, j_valid_fg)
+        # score_gt_point = score_gt_point - 0.5
+        # score_gt_point[score_gt_point<0] = 0
+        # score_gt_point = torch.ceil(score_gt_point*(self.score_cls_num-1)/0.5)
         score_gt_point = torch.floor(score_gt_point*self.score_cls_num)
         score_gt_point[score_gt_point>=self.score_cls_num] = self.score_cls_num - 1
+        # score_gt_point = F.one_hot(score_gt_point.long(), self.score_cls_num)
         score_est_point = score_est_point[index_valid]
         # print(score_est_point.shape, torch.sum(score_gt_point<10))
         # with torch.no_grad():
@@ -156,10 +201,17 @@ class DensePoseScoringLoss:
         # print(torch.sum(coarse_segm_gt, (1,2)))
         # print(score_est_instance, score_gt_instance)
         # score_est_instance = score_est[bbox_indices]
+
+        i_acc_est = densepose_scoring_predictor_outputs.i_score
+        uv_acc_est = densepose_scoring_predictor_outputs.uv_score
+        
         return {
             # "loss_densepose_score_point": l2_loss(score_est_point, score_gt_point) * self.loss_weight_point,
             # "loss_densepose_score_instance": l2_loss(score_est_instance, score_gt_instance) * self.loss_weight_instance,
             "loss_densepose_score": F.cross_entropy(score_est_point, score_gt_point.long()) * self.loss_weight_point,  
+            # "loss_densepose_score": F.binary_cross_entropy(score_est_point, score_gt_point.float()) * self.loss_weight_point, 
+            "loss_i_score": l2_loss(i_acc_est, i_acc_gt) * self.loss_weight_acc,  
+            "loss_uv_score": l2_loss(uv_acc_est, uv_acc_gt) * self.loss_weight_acc,  
         }
 
         # focal loss
@@ -171,6 +223,22 @@ class DensePoseScoringLoss:
         # return {
         #     "loss_densepose_score": loss.mean() * self.loss_weight_point,
         #     }
+    
+    def produce_mask_scoring_losses(
+        self,
+        proposals_with_gt: List[Instances],
+        densepose_predictor_outputs: Any,
+        densepose_scoring_predictor_outputs: Any,
+        packed_annotations: Any,
+        interpolator: BilinearInterpolationHelper,
+        j_valid_fg: torch.Tensor,
+    ) -> LossDict:
+        return {
+            "loss_mask_score": self.segm_iou_loss(
+                proposals_with_gt, densepose_predictor_outputs, densepose_scoring_predictor_outputs, packed_annotations
+            )
+            * self.loss_weight_segm,
+        }
         
 
     def getDensePoseScore(
@@ -225,7 +293,29 @@ class DensePoseScoringLoss:
         #         continue
         #     # score_gt_instance[i_bbox] = torch.mean(scores_gt_point[i_point_indices])
         #     score_gt_instance[i_bbox] = torch.mean(scores_gt_point[i_point_indices])
-        return score_gt_instance, scores_gt_point, index_valid
+
+        i_acc_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
+        uv_acc_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
+        for i_bbox, bbox_index in enumerate(bbox_indices):
+            i_point_indices = ((point_bbox_indices == bbox_index).nonzero(as_tuple=True)[0])
+            if len(i_point_indices) == 0:
+                continue
+            i_gt_b = i_gt[i_point_indices]
+            i_est_b = i_est[i_point_indices]
+            u_gt_b = u_gt[i_point_indices]
+            u_est_b = u_est[i_point_indices]
+            v_gt_b = v_gt[i_point_indices]
+            v_est_b = v_est[i_point_indices]
+
+            if len(torch.unique(i_gt_b)) == 1:
+                i_acc_gt[i_bbox] = (i_est_b == i_gt_b[0]).sum()/len(i_est_b)
+            else:
+                cm = ConfusionMatrix(actual_vector=np.array(i_gt_b.cpu()).astype(np.int32), predict_vector=np.array(i_est_b.cpu()).astype(np.int32))
+                i_acc_gt[i_bbox] = torch.tensor(cm.overall_stat['F1 Micro'], device=i_gt_b.device)
+            dist_uv = ((u_est_b-u_gt_b)**2 + (v_est_b-v_gt_b)**2)**(1/2)
+            uv_acc_gt[i_bbox] = torch.exp(-(dist_uv.mean())*3)
+
+        return score_gt_instance, scores_gt_point, index_valid, i_acc_gt, uv_acc_gt
 
         # score_gt = torch.zeros_like(bbox_indices, dtype=torch.float32)
         # for i_bbox, bbox_index in enumerate(bbox_indices):
@@ -331,3 +421,9 @@ class DensePoseScoringLoss:
         dists = dists*oulter - (oulter-1.)*3
         return dists,index_cVertsGT
         # return torch.from_numpy(np.atleast_1d(np.array(dists.cpu()).squeeze())).float().cuda()
+
+    def produce_densepose_losses_for_none_proposal(self, feature: Any) -> LossDict:
+        losses = {
+            "loss_densepose_score": feature.sum() * 0,
+            }
+        return {**losses}

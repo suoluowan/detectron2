@@ -235,7 +235,16 @@ def prediction_to_dict(instances, img_id, embedder, class_to_mesh_name, use_stor
         }
         if instances.has("densepose_scores"):
             densepose_score = results_densepose[k]["densepose_score"]
-            result["score"] = 0.9*scores[k]+0.1*densepose_score
+            mask_score = results_densepose[k]["mask_score"]
+            i_score = results_densepose[k]["i_score"]
+            uv_score = results_densepose[k]["uv_score"]
+            # print(scores[k], densepose_score, mask_score)
+            if torch.isnan(densepose_score):
+                # result["score"] = ((scores[k]**3) * (mask_score**2))**(1/5)
+                result["score"] = scores[k]*1.0 + i_score*0.1 + uv_score*0.1 + mask_score*0.
+            else: 
+                result["score"] = scores[k]*1.0 + densepose_score*0.1  + i_score*0.1 + uv_score*0.1 + mask_score*0.
+                # result["score"] = ((scores[k]**3) * (densepose_score**1) * (mask_score**1))**(1/5)
         results.append({**result, **results_densepose[k]})
     return results
 
@@ -267,6 +276,9 @@ def densepose_chart_predictions_to_dict(instances):
         if instances.has("densepose_scores"):
             densepose_score = resample_densepose_scores_segm_to_score(instances.densepose_scores[k], instances.pred_densepose[k], instances.pred_boxes[k])
             result.update({"densepose_score": densepose_score/10.})
+            result.update({"mask_score": instances.mask_scores[k]})
+            result.update({"i_score": instances.i_scores[k]})
+            result.update({"uv_score": instances.uv_scores[k]})
         results.append(result)
     return results
 
