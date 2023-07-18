@@ -53,9 +53,9 @@ and for [continuous surface embeddings model zoo](doc/DENSEPOSE_CSE.md#ModelZoo)
 * April 2020: [DensePose Confidence Estimation and Model Zoo Improvements](doc/RELEASE_2020_04.md)
 
 # Datasets
-\href{http://densepose.org/}{DensePose-COCO}
-\href{https://dl.fbaipublicfiles.com/densepose/annotations/densepose_chimps/densepose_chimps_full_v2.json}{DensePose-Chimps} 
-\href{https://github.com/MomoAILab/ultrapose}{Ultrapose}
+<a href="http://densepose.org/">DensePose-COCO</a>
+<a href="https://dl.fbaipublicfiles.com/densepose/annotations/densepose_chimps/densepose_chimps_full_v2.json">DensePose-Chimps</a>
+<a href="https://github.com/MomoAILab/ultrapose">Ultrapose</a>
 
 # License
 
