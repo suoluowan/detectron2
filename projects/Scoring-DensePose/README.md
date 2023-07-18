@@ -54,7 +54,9 @@ and for [continuous surface embeddings model zoo](doc/DENSEPOSE_CSE.md#ModelZoo)
 
 # Datasets
 <a href="http://densepose.org/">DensePose-COCO</a>
+
 <a href="https://dl.fbaipublicfiles.com/densepose/annotations/densepose_chimps/densepose_chimps_full_v2.json">DensePose-Chimps</a>
+
 <a href="https://github.com/MomoAILab/ultrapose">Ultrapose</a>
 
 # License
