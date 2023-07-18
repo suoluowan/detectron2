@@ -52,6 +52,11 @@ and for [continuous surface embeddings model zoo](doc/DENSEPOSE_CSE.md#ModelZoo)
   and DensePose Evolution (a framework to bootstrap DensePose on unlabeled data) released](doc/RELEASE_2021_03.md)
 * April 2020: [DensePose Confidence Estimation and Model Zoo Improvements](doc/RELEASE_2020_04.md)
 
+# Datasets
+\href{http://densepose.org/}{DensePose-COCO}
+\href{https://dl.fbaipublicfiles.com/densepose/annotations/densepose_chimps/densepose_chimps_full_v2.json}{DensePose-Chimps} 
+\href{https://github.com/MomoAILab/ultrapose}{Ultrapose}
+
 # License
 
 Detectron2 is released under the [Apache 2.0 license](../../LICENSE)
